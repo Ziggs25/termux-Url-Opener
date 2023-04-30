@@ -1,0 +1,138 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# Config
+
+MUSIC="$HOME/storage/music"
+ASMR="$HOME/storage/shared/.nsfw"
+VIDEOS="$HOME/storage/movies"
+CLIPS="$HOME/storage/movies/Clips"
+DOWNLOADS="$HOME/storage/downloads/navi"
+
+# End
+
+url=$1
+
+echo $url
+
+# Site regexs
+yt="^(https?\:\/\/)?(((www|m)\.)?youtube\.com|youtu\.be)\/.+$"
+
+# Functions for downloading 
+asmr() {
+  echo ASMR
+  yt-dlp -f bestaudio --extract-audio --embed-thumbnail --embed-metadata \
+    --external-downloader aria2c --external-downloader-args "-x 16  -k 1M" \
+    -o "$ASMR/yt/%(channel)s/%(upload_date)s-%(title)s-%(id)s.%(ext)s" --no-mtime $url
+}
+
+music() {
+  echo Music
+  yt-dlp -f bestaudio --extract-audio --embed-thumbnail --embed-metadata \
+    --external-downloader aria2c --external-downloader-args "-x 16 -k 1M" \
+    --postprocessor-args "-filter:v crop=in_h" \
+    -o "$MUSIC/%(title)s.%(ext)s" --no-mtime $url
+}
+
+video() {
+  echo Video
+  echo "getting resolutions..."
+  formats="$(yt-dlp -F $url | awk '!/youtube|info|ID|-|mhtml|webm|audio only/{print $1,$3}')"
+id_list="$(echo "$formats" | awk '{ print $1 }')"
+resolutions="$(echo "$formats" | awk '{ print $2,$3 }' | paste -sd,)"
+echo "$resolutions"
+index="$(termux-dialog sheet -v "$resolutions" | jq '.index' -r)"
+id="$(echo "$id_list" | head -$(($index+1)) | tail -1)"
+  yt-dlp $url -f "$id+ba" \
+    -o "$VIDEOS/%(title)s-%(id)s.%(ext)s" \
+    --external-downloader aria2c --external-downloader-args "aria2c:-x 16 -k 1M" \
+    --embed-subs --embed-thumbnail --embed-metadata \
+    -S res,hdr,fps,vcodec:av01:h265:vp9.2:vp9:h264,vbr \
+    --no-mtime
+}
+
+aria() {
+  aria2c -x16 -d $DOWNLOADS \
+    --on-download-complete "$HOME/bin/openfile" \
+    $url
+  exit
+}
+
+spot() {
+  spotdl $url --output $MUSIC
+  exit
+}
+
+play_audio() {
+  mpv --no-video $url
+  exit
+}
+
+yt() {
+  method="$(termux-dialog sheet -v "ASMR,Music,Video,Play in mpv" | jq '.index' -r)"
+  case $method in
+  0)
+    asmr
+  ;;
+  1)
+    music
+  ;;
+  2)
+    video
+  ;;
+  3)
+    play_audio
+  ;;
+  *)
+    exit
+  ;;
+  esac
+}
+
+uns() {
+  method="$(termux-dialog sheet -v "ASMR, Music,Video,Aria" | jq '.index' -r)"
+  case $method in
+  0)
+    asmr
+    ;;
+  1)
+    music
+    ;;
+  2)
+    video
+    ;;
+  3)
+    aria
+    ;;
+  esac
+}
+
+# Enable extglob for regex
+shopt -s extglob
+
+# Check what site is being passed
+case $url in
+https://music.youtube.com/watch?v=+([a-zA-Z0-9_-])*)
+  music
+;;
+*youtube.com* | *youtu.be*)
+  echo Download a yt vid
+  yt
+;;
+*twitter*)
+  echo twitter
+  video
+;;
+*sourceforge* | *zippyshare*)
+  echo download file
+  aria
+;;
+*spotify*)
+  spot
+;;
+*)
+  echo "unsupported site"
+  uns
+;;
+esac
+
+termux-toast -s "Download Done"
