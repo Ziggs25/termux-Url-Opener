@@ -1,6 +1,6 @@
 ## Install
 ```sh
-git clone https://github.com/crimera/termux-dotfiles ~/.dotfiles
+git clone https://github.com/Ziggs25/termux-Url-Opener ~/.dotfiles
 cd ~/.dotfiles
 ./install.sh
 ```
